@@ -147,34 +147,34 @@ class IscDhcpLeases(object):
         leases = []
         with open(self.filename) if not self.gzip else gzip.open(self.filename) as lease_file:
             lease_data = lease_file.read()
-            if self.gzip:
-                lease_data = lease_data.decode('utf-8')
-            for match in self.regex_leaseblock.finditer(lease_data):
-                block = match.groupdict()
+        if self.gzip:
+            lease_data = lease_data.decode('utf-8')
+        for match in self.regex_leaseblock.finditer(lease_data):
+            block = match.groupdict()
 
+            properties, options, sets = _extract_properties(block['config'])
+
+            if 'hardware' not in properties and not include_backups:
+                # E.g. rows like {'binding': 'state abandoned', ...}
+                continue
+            lease = Lease(block['ip'], properties=properties, options=options, sets=sets, now=self.now)
+            leases.append(lease)
+
+        for match in self.regex_leaseblock6.finditer(lease_data):
+            block = match.groupdict()
+            properties, options, sets = _extract_properties(block['config'])
+
+            host_identifier = block['id']
+            block_type = block['type']
+            last_client_communication = parse_time(properties['cltt'])
+
+            for address_block in self.regex_iaaddr.finditer(block['config']):
+                block = address_block.groupdict()
                 properties, options, sets = _extract_properties(block['config'])
 
-                if 'hardware' not in properties and not include_backups:
-                    # E.g. rows like {'binding': 'state abandoned', ...}
-                    continue
-                lease = Lease(block['ip'], properties=properties, options=options, sets=sets, now=self.now)
+                lease = Lease6(block['ip'], properties, last_client_communication, host_identifier, block_type,
+                               options=options, sets=sets, now=self.now)
                 leases.append(lease)
-
-            for match in self.regex_leaseblock6.finditer(lease_data):
-                block = match.groupdict()
-                properties, options, sets = _extract_properties(block['config'])
-
-                host_identifier = block['id']
-                block_type = block['type']
-                last_client_communication = parse_time(properties['cltt'])
-
-                for address_block in self.regex_iaaddr.finditer(block['config']):
-                    block = address_block.groupdict()
-                    properties, options, sets = _extract_properties(block['config'])
-
-                    lease = Lease6(block['ip'], properties, last_client_communication, host_identifier, block_type,
-                                   options=options, sets=sets, now=self.now)
-                    leases.append(lease)
 
         return leases
 
