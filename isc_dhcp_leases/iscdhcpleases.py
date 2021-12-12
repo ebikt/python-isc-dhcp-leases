@@ -128,11 +128,24 @@ def _read_file(filename):
 
 def _read_gzip_file(filename):
     with gzip.open(filename) as file:
-        return file.read().decode('utf-8')
+        data = file.read()
+        return data.decode('utf-8')
 
 class IscDhcpLeases(object):
     """
     Class to parse isc-dhcp-server lease files into lease objects
+
+    Args:
+        filename (os.PathLike):         filename to be opened
+                                            (unless reader or data is specified)
+        gzip (bool):                    open filename using gzip.open()
+                                            (unless reader or data is specified)
+        now (datetime.datetime):        reference time for checking validity of leases
+        reader (f(filename) -> str):    function that reads filename and returns contents of the file
+                                            gets filename as argument
+                                            argument gzip is ignored
+        data (str):                     data to parse
+                                            arguments filename, gzip and reader are ignored
     """
 
     regex_leaseblock = re.compile(r"lease (?P<ip>\d+\.\d+\.\d+\.\d+) {(?P<config>[\s\S]+?)\n}")
@@ -140,14 +153,25 @@ class IscDhcpLeases(object):
         r"ia-(?P<type>ta|na|pd) \"(?P<id>[^\"\\]*(?:\\.[^\"\\]*)*)\" {(?P<config>[\s\S]+?)\n}")
     regex_iaaddr = re.compile(r"ia(addr|prefix) (?P<ip>[0-9a-f:]+(/[0-9]+)?) {(?P<config>[\s\S]+?)\n\s+}")
 
-    def __init__(self, filename, gzip=False, now=None):
+    def __init__(self, filename=None, gzip=False, now=None, reader=None, data=None):
         check_datetime(now)
 
         self.filename = filename
-        if self.gzip:
-            self._read_file = _read_gzip_file
+        if reader is not None and data is not None:
+            raise ValueError("IscDhcpLeases: argument 'data' conflicts with argument 'reader'")
+        elif reader is not None:
+            self._read_file = reader
+        elif data is not None:
+            if str != bytes and isinstance(data, bytes):
+                data = data.decode('utf-8')
+            self._read_file = lambda x: data
         else:
-            self._read_file = _read_file
+            if filename is None:
+                raise ValueError("IscDhcpLeases: excpecting at least one of 'filename', 'reader', 'data'")
+            if self.gzip:
+                self._read_file = _read_gzip_file
+            else:
+                self._read_file = _read_file
         self.now = now
 
     def get(self, include_backups=False):
