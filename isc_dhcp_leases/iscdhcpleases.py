@@ -122,6 +122,13 @@ def _extract_properties(config):
 
     return general, options, sets
 
+def _read_file(filename):
+    with open(filename) as file:
+        return file.read()
+
+def _read_gzip_file(filename):
+    with gzip.open(filename) as file:
+        return file.read().decode('utf-8')
 
 class IscDhcpLeases(object):
     """
@@ -137,7 +144,10 @@ class IscDhcpLeases(object):
         check_datetime(now)
 
         self.filename = filename
-        self.gzip = gzip
+        if self.gzip:
+            self._read_file = _read_gzip_file
+        else:
+            self._read_file = _read_file
         self.now = now
 
     def get(self, include_backups=False):
@@ -145,10 +155,7 @@ class IscDhcpLeases(object):
         Parse the lease file and return a list of Lease instances.
         """
         leases = []
-        with open(self.filename) if not self.gzip else gzip.open(self.filename) as lease_file:
-            lease_data = lease_file.read()
-        if self.gzip:
-            lease_data = lease_data.decode('utf-8')
+        lease_data = self._read_file(self.filename)
         for match in self.regex_leaseblock.finditer(lease_data):
             block = match.groupdict()
 
